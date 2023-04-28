@@ -32,3 +32,6 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+#Ignore GCP SVC Key
+lateral-academy-svc-key-gcp.json
