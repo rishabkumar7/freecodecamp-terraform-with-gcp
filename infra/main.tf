@@ -1,36 +1,35 @@
-# Creating a bucket for static site
-resource "google_storage_bucket" "static_site" {
-  name          = "example-rishab-coffee"
-  location      = "US"
-  force_destroy = true
-  website {
-  main_page_suffix = "index.html"
-  }
-  cors {
-    origin          = ["*"]
-    method          = ["GET", "HEAD", "PUT", "POST", "DELETE"]
-    response_header = ["*"]
-    max_age_seconds = 3600
-  }
+# Bucket to store website
+resource "google_storage_bucket" "website" {
+  provider = google
+  name     = "example-rishab-coffee7"
+  location = "US"
 }
+
+# Make new objects public
+resource "google_storage_object_access_control" "public_rule" {
+  object = google_storage_bucket_object.static_site_src.output_name
+  bucket = google_storage_bucket.website.name
+  role   = "READER"
+  entity = "allUsers"
+}
+#resource "google_storage_default_object_access_control" "website_read" {
+#  bucket = google_storage_bucket.website.name
+#  role   = "READER"
+#  entity = "allUsers"
+#}
 
 # Upload the html file to the bucket
 resource "google_storage_bucket_object" "static_site_src" {
   name   = "index.html"
   source = "../website/index.html"
-  bucket = google_storage_bucket.static_site.name
+  bucket = google_storage_bucket.website.name
+  
 }
 
-# Make the bucket public
-resource "google_storage_default_object_access_control" "public_rule" {
-  bucket = google_storage_bucket.static_site.name
-  role   = "READER"
-  entity = "allUsers"
-}
-
-# Reserve IP address
+# Reserve an external IP
 resource "google_compute_global_address" "website" {
-  name = "example-ip"
+  provider = google
+  name     = "website-lb-ip"
 }
 
 # Get the managed DNS zone
@@ -49,11 +48,12 @@ resource "google_dns_record_set" "website" {
   rrdatas      = [google_compute_global_address.website.address]
 }
 
-# Create a backend for the load-balancer
-resource "google_compute_backend_bucket" "website" {
-  name        = "examplestaticsite"
-  description = "Contains hello world"
-  bucket_name = google_storage_bucket.static_site.name
+# Add the bucket as a CDN backend
+resource "google_compute_backend_bucket" "website-backend" {
+  provider    = google
+  name        = "website-backend"
+  description = "Contains files needed by the website"
+  bucket_name = google_storage_bucket.website.name
   enable_cdn  = true
 }
 
@@ -70,7 +70,16 @@ resource "google_compute_managed_ssl_certificate" "website" {
 resource "google_compute_url_map" "website" {
   provider        = google
   name            = "website-url-map"
-  default_service = google_compute_backend_bucket.website.self_link
+  default_service = google_compute_backend_bucket.website-backend.self_link
+    host_rule {
+    hosts        = ["*"]
+    path_matcher = "allpaths"
+  }
+
+  path_matcher {
+    name            = "allpaths"
+    default_service = google_compute_backend_bucket.website-backend.self_link
+  }
 }
 
 # GCP target proxy
@@ -82,7 +91,7 @@ resource "google_compute_target_https_proxy" "website" {
 }
 
 # GCP forwarding rule
-resource "google_compute_global_forwarding_rule" "website" {
+resource "google_compute_global_forwarding_rule" "default" {
   provider              = google
   name                  = "website-forwarding-rule"
   load_balancing_scheme = "EXTERNAL"
