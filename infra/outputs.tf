@@ -1,4 +1,4 @@
 output "url" {
   description = "Website URL"
-  value       = google_storage_bucket.static_site.self_link
+  value       = google_compute_url_map.website.self_link
 }
